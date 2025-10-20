@@ -47,7 +47,7 @@ const ContactSupport = () => {
           </h2>
           <p className="text-xl text-black max-w-3xl mx-auto">
             Have questions? Need assistance? Our dedicated support team is here to help you 24/7. 
-            Get in touch through your preferred channel.
+            Get in touch through your preferred channeel.
           </p>
         </div>
 
