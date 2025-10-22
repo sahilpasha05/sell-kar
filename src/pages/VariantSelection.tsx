@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Loader2 } from "lucide-react";
+import { supabase, type DeviceVariant } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 
 // Define the route params type
 type RouteParams = {
@@ -17,70 +19,51 @@ const VariantSelection = () => {
 
   const [selectedStorage, setSelectedStorage] = useState("");
   const [basePrice, setBasePrice] = useState<number | null>(null);
+  const [variants, setVariants] = useState<DeviceVariant[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
-  const storageOptions = {
-    phone: ["64GB", "128GB", "256GB", "512GB", "1TB"],
-    laptop: ["256GB SSD", "512GB SSD", "1TB SSD", "2TB SSD"],
-    ipad: ["64GB", "128GB", "256GB", "512GB", "1TB", "2TB"],
-  };
+  useEffect(() => {
+    const fetchVariants = async () => {
+      if (!deviceId) return;
 
-  const basePrices: { [key: string]: number } = {
-    "iphone-15-pro-max": 50000,
-    "iphone-15-pro": 45000,
-    "iphone-15": 38000,
-    "iphone-14-pro-max": 42000,
-    "iphone-14-pro": 38000,
-    "iphone-14": 32000,
-    "iphone-13": 28000,
-    "iphone-12": 24000,
-    "iphone-11": 20000,
-    "iphone-x": 15000,
-    "iphone-xr": 18000,
-    "iphone-8": 12000,
-    "galaxy-s24-ultra": 48000,
-    "galaxy-s24-plus": 40000,
-    "galaxy-s24": 35000,
-    "galaxy-s23-ultra": 38000,
-    "galaxy-s22-ultra": 32000,
-    "galaxy-s21": 25000,
-    "galaxy-note-20": 22000,
-    "macbook-pro-16-m3": 120000,
-    "macbook-pro-14-m3": 95000,
-    "macbook-air-15": 75000,
-    "macbook-air-13": 65000,
-    "dell-xps-13": 45000,
-    "dell-xps-15": 55000,
-    "dell-inspiron-15": 30000,
-    "dell-latitude-14": 35000,
-    "ipad-pro-12": 48000,
-    "ipad-pro-11": 38000,
-    "ipad-air": 32000,
-    "ipad-mini": 25000,
-    "ipad-10th-gen": 20000,
-    "galaxy-tab-s9-ultra": 42000,
-    "galaxy-tab-s9": 35000,
-    "galaxy-tab-s8": 28000,
-    "galaxy-tab-a8": 18000,
-  };
+      try {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('device_variants')
+          .select('*')
+          .eq('device_id', deviceId)
+          .order('base_price', { ascending: true });
 
-  const calculateBasePrice = (storage: string) => {
-    if (!deviceId) return;
+        if (error) throw error;
 
-    const baseDevicePrice = basePrices[deviceId] || 20000;
-    
-    // Apply storage multiplier to get base price for selected storage
-    let storageMultiplier = 1;
-    if (storage.includes("512GB")) storageMultiplier = 1.15;
-    if (storage.includes("1TB")) storageMultiplier = 1.3;
-    if (storage.includes("2TB")) storageMultiplier = 1.5;
+        if (data && data.length > 0) {
+          setVariants(data);
+        } else {
+          toast({
+            title: "No pricing data",
+            description: "Pricing information is not available for this device yet.",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching variants:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load pricing information. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    const calculatedPrice = Math.round(baseDevicePrice * storageMultiplier);
-    setBasePrice(calculatedPrice);
-  };
+    fetchVariants();
+  }, [deviceId, toast]);
 
-  const handleStorageSelection = (storage: string) => {
+  const handleStorageSelection = (storage: string, price: number) => {
     setSelectedStorage(storage);
-    calculateBasePrice(storage);
+    setBasePrice(price);
   };
 
   const getDeviceName = (id: string) => {
@@ -125,8 +108,7 @@ const VariantSelection = () => {
     return deviceNames[id] || id;
   };
 
-  const backPath = `/sell-${deviceType}/brand/${brandId}`;
-  const storageOpts = storageOptions[deviceType as keyof typeof storageOptions] || [];
+  const backPath = `/sell-${deviceType}/brand/${brandId}/device/${deviceId}/city`;
 
   return (
     <div className="min-h-screen bg-background">
@@ -148,50 +130,60 @@ const VariantSelection = () => {
               Choose <span style={{ color: "royalBlue" }}>Variant</span>
             </h1>
             <p className="text-xl max-w-2xl mx-auto" style={{ color: "black" }}>
-              Select storage capacity for your {getDeviceName(deviceId)}
+              Select storage capacity for your {variants[0]?.device_name || getDeviceName(deviceId)}
             </p>
           </div>
 
-          <Card className="card-premium max-w-2xl mx-auto">
-            <div className="space-y-8">
-              {/* Storage Selection */}
-              <div>
-                <h3 className="text-xl font-semibold mb-4" style={{ color: "black" }}>Storage Capacity</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {storageOpts.map((storage) => (
-                    <Button
-                      key={storage}
-                      variant={selectedStorage === storage ? "default" : "outline"}
-                      onClick={() => handleStorageSelection(storage)}
-                      className="h-12"
-                      style={{ color: "black" }}
-                    >
-                      {storage}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Base Price Display */}
-              {basePrice !== null && selectedStorage && (
-                <div className="text-center space-y-6 animate-fade-in pt-6 border-t border-border">
-                  <div>
-                    <p className="text-lg mb-2" style={{ color: "black" }}>
-                      Base price for {getDeviceName(deviceId)} ({selectedStorage})
-                    </p>
-                    <div className="text-5xl font-bold mb-4" style={{ color: "royalBlue" }}>₹{basePrice.toLocaleString()}</div>
-                    <p className="text-sm" style={{ color: "black" }}>*Final price depends on device condition</p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <Link to={`/sell-${deviceType}/brand/${brandId}/device/${deviceId}/city/${cityId}/questionnaire`}>
-                      <Button className="btn-hero w-full h-12" style={{ backgroundColor: "royalBlue", color: "black" }}>Get Exact Value</Button>
-                    </Link>
-                  </div>
-                </div>
-              )}
+          {loading ? (
+            <div className="flex justify-center items-center min-h-[400px]">
+              <Loader2 className="w-8 h-8 animate-spin" style={{ color: "royalBlue" }} />
             </div>
-          </Card>
+          ) : variants.length === 0 ? (
+            <Card className="card-premium max-w-2xl mx-auto p-8 text-center">
+              <p className="text-lg" style={{ color: "black" }}>No variants available for this device.</p>
+            </Card>
+          ) : (
+            <Card className="card-premium max-w-2xl mx-auto">
+              <div className="space-y-8">
+                {/* Storage Selection */}
+                <div>
+                  <h3 className="text-xl font-semibold mb-4" style={{ color: "black" }}>Storage Capacity</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {variants.map((variant) => (
+                      <Button
+                        key={variant.id}
+                        variant={selectedStorage === variant.storage ? "default" : "outline"}
+                        onClick={() => handleStorageSelection(variant.storage, variant.base_price)}
+                        className="h-12"
+                        style={{ color: "black" }}
+                      >
+                        {variant.storage}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Base Price Display */}
+                {basePrice !== null && selectedStorage && (
+                  <div className="text-center space-y-6 animate-fade-in pt-6 border-t border-border">
+                    <div>
+                      <p className="text-lg mb-2" style={{ color: "black" }}>
+                        Base price for {variants[0]?.device_name || getDeviceName(deviceId)} ({selectedStorage})
+                      </p>
+                      <div className="text-5xl font-bold mb-4" style={{ color: "royalBlue" }}>₹{basePrice.toLocaleString()}</div>
+                      <p className="text-sm" style={{ color: "black" }}>*Final price depends on device condition</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Link to={`/sell-${deviceType}/brand/${brandId}/device/${deviceId}/city/${cityId}/questionnaire`}>
+                        <Button className="btn-hero w-full h-12" style={{ backgroundColor: "royalBlue", color: "black" }}>Get Exact Value</Button>
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>
